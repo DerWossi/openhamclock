@@ -1398,9 +1398,30 @@
       const dxPathsMarkersRef = useRef([]);
       const satMarkersRef = useRef([]);
       const satTracksRef = useRef([]);
-      const [mapStyle, setMapStyle] = useState('dark');
-      const [showSatellites, setShowSatellites] = useState(true);
-      const [showDXPaths, setShowDXPaths] = useState(true);
+      
+      // Load map view settings from localStorage
+      const getStoredMapSettings = () => {
+        try {
+          const stored = localStorage.getItem('openhamclock_mapSettings');
+          return stored ? JSON.parse(stored) : {};
+        } catch (e) { return {}; }
+      };
+      const storedSettings = getStoredMapSettings();
+      
+      const [mapStyle, setMapStyle] = useState(storedSettings.mapStyle || 'dark');
+      const [showSatellites, setShowSatellites] = useState(storedSettings.showSatellites !== false);
+      const [showDXPaths, setShowDXPaths] = useState(storedSettings.showDXPaths !== false);
+      
+      // Save map view settings to localStorage when they change
+      useEffect(() => {
+        try {
+          localStorage.setItem('openhamclock_mapSettings', JSON.stringify({
+            mapStyle,
+            showSatellites,
+            showDXPaths
+          }));
+        } catch (e) { console.error('Failed to save map settings:', e); }
+      }, [mapStyle, showSatellites, showDXPaths]);
 
       // Initialize map
       useEffect(() => {
@@ -1816,18 +1837,30 @@
         <div style={{ position: 'relative', height: '100%', minHeight: '200px' }}>
           <div ref={mapRef} style={{ height: '100%', width: '100%', borderRadius: '8px' }} />
           
-          {/* Map style selector */}
-          <div className="map-style-control">
+          {/* Map style dropdown */}
+          <select
+            value={mapStyle}
+            onChange={(e) => setMapStyle(e.target.value)}
+            style={{
+              position: 'absolute',
+              top: '10px',
+              right: '10px',
+              background: 'rgba(0, 0, 0, 0.8)',
+              border: '1px solid #444',
+              color: '#00ffcc',
+              padding: '6px 10px',
+              borderRadius: '4px',
+              fontSize: '11px',
+              fontFamily: 'JetBrains Mono',
+              cursor: 'pointer',
+              zIndex: 1000,
+              outline: 'none'
+            }}
+          >
             {Object.entries(MAP_STYLES).map(([key, style]) => (
-              <button
-                key={key}
-                className={`map-style-btn ${mapStyle === key ? 'active' : ''}`}
-                onClick={() => setMapStyle(key)}
-              >
-                {style.name}
-              </button>
+              <option key={key} value={key}>{style.name}</option>
             ))}
-          </div>
+          </select>
           
           {/* Satellite toggle */}
           <button
@@ -1850,7 +1883,7 @@
               gap: '4px'
             }}
           >
-            🛰 {showSatellites ? 'SATS ON' : 'SATS OFF'}
+            🛰 {showSatellites ? 'SAT' : 'SAT'}
           </button>
           
           {/* DX Paths toggle */}
@@ -1859,7 +1892,7 @@
             style={{
               position: 'absolute',
               top: '10px',
-              left: '155px',
+              left: '118px',
               background: showDXPaths ? 'rgba(68, 136, 255, 0.2)' : 'rgba(0, 0, 0, 0.7)',
               border: `1px solid ${showDXPaths ? '#4488ff' : '#666'}`,
               color: showDXPaths ? '#4488ff' : '#888',
@@ -1874,7 +1907,7 @@
               gap: '4px'
             }}
           >
-            📡 {showDXPaths ? 'DX ON' : 'DX OFF'}
+            📡 {showDXPaths ? 'DX' : 'DX'}
           </button>
         </div>
       );
@@ -1883,7 +1916,7 @@
     // ============================================
     // UI COMPONENTS
     // ============================================
-    const Header = ({ callsign, uptime, version, onSettingsClick }) => (
+    const Header = ({ callsign, uptime, version, onSettingsClick, onFullscreenToggle, isFullscreen }) => (
       <header style={{
         background: 'linear-gradient(180deg, var(--bg-secondary) 0%, var(--bg-primary) 100%)',
         borderBottom: '1px solid var(--border-color)',
@@ -1909,7 +1942,7 @@
             title="Click to change settings"
           >{callsign}</div>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '24px', fontFamily: 'JetBrains Mono, monospace', fontSize: '12px', color: 'var(--text-secondary)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '16px', fontFamily: 'JetBrains Mono, monospace', fontSize: '12px', color: 'var(--text-secondary)' }}>
           <span>UPTIME: {uptime}</span>
           <span style={{ color: 'var(--accent-cyan)' }}>v{version}</span>
           <button
@@ -1924,6 +1957,21 @@
             title="Settings"
           >
             ⚙ Settings
+          </button>
+          <button
+            onClick={onFullscreenToggle}
+            style={{
+              background: isFullscreen ? 'rgba(0, 255, 136, 0.15)' : 'var(--bg-tertiary)', 
+              border: `1px solid ${isFullscreen ? 'var(--accent-green)' : 'var(--border-color)'}`,
+              borderRadius: '6px', padding: '8px 12px', 
+              color: isFullscreen ? 'var(--accent-green)' : 'var(--text-secondary)',
+              cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px',
+              fontFamily: 'JetBrains Mono, monospace', fontSize: '13px',
+              transition: 'all 0.2s'
+            }}
+            title={isFullscreen ? "Exit Fullscreen" : "Enter Fullscreen"}
+          >
+            {isFullscreen ? '⛶' : '⛶'} {isFullscreen ? 'Exit' : 'Full'}
           </button>
           <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--accent-green)', boxShadow: '0 0 8px var(--accent-green)', animation: 'pulse 2s infinite' }} />
         </div>
@@ -2182,7 +2230,7 @@
       config, currentTime, utcTime, utcDate, localTime, localDate,
       deGrid, dxGrid, deSunTimes, dxSunTimes, dxLocation, onDXChange,
       spaceWeather, bandConditions, potaSpots, dxCluster, dxPaths, contests, propagation, mySpots, satellites,
-      onSettingsClick
+      onSettingsClick, onFullscreenToggle, isFullscreen
     }) => {
       const bearing = calculateBearing(config.location.lat, config.location.lon, dxLocation.lat, dxLocation.lon);
       const distance = calculateDistance(config.location.lat, config.location.lon, dxLocation.lat, dxLocation.lon);
@@ -2446,21 +2494,36 @@
           {/* BOTTOM - Footer */}
           <div style={{ ...panelStyle, gridRow: '3', gridColumn: '1 / -1', display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 12px' }}>
             <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-              OpenHamClock v3.3.0 • In memory of Elwood Downey WB0OEW
+              OpenHamClock v3.5.1 • In memory of Elwood Downey WB0OEW
             </span>
             <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
               Click map to set DX • 73 de {config.callsign}
             </span>
-            <button
-              onClick={onSettingsClick}
-              style={{
-                background: 'var(--bg-tertiary)', border: '1px solid var(--border-color)',
-                padding: '4px 10px', borderRadius: '4px', color: 'var(--text-secondary)',
-                fontSize: '12px', cursor: 'pointer', fontFamily: 'JetBrains Mono, monospace'
-              }}
-            >
-              ⚙ Settings
-            </button>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button
+                onClick={onSettingsClick}
+                style={{
+                  background: 'var(--bg-tertiary)', border: '1px solid var(--border-color)',
+                  padding: '4px 10px', borderRadius: '4px', color: 'var(--text-secondary)',
+                  fontSize: '12px', cursor: 'pointer', fontFamily: 'JetBrains Mono, monospace'
+                }}
+              >
+                ⚙ Settings
+              </button>
+              <button
+                onClick={onFullscreenToggle}
+                style={{
+                  background: isFullscreen ? 'rgba(0, 255, 136, 0.15)' : 'var(--bg-tertiary)', 
+                  border: `1px solid ${isFullscreen ? 'var(--accent-green)' : 'var(--border-color)'}`,
+                  padding: '4px 10px', borderRadius: '4px', 
+                  color: isFullscreen ? 'var(--accent-green)' : 'var(--text-secondary)',
+                  fontSize: '12px', cursor: 'pointer', fontFamily: 'JetBrains Mono, monospace'
+                }}
+                title={isFullscreen ? "Exit Fullscreen" : "Enter Fullscreen"}
+              >
+                {isFullscreen ? '⛶ Exit' : '⛶ Full'}
+              </button>
+            </div>
           </div>
         </div>
       );
@@ -2800,6 +2863,33 @@
       const [uptime, setUptime] = useState('0d 0h 0m');
       const [dxLocation, setDxLocation] = useState(config.defaultDX);
       const [showSettings, setShowSettings] = useState(false);
+      const [isFullscreen, setIsFullscreen] = useState(false);
+
+      // Fullscreen toggle handler
+      const handleFullscreenToggle = useCallback(() => {
+        if (!document.fullscreenElement) {
+          document.documentElement.requestFullscreen().then(() => {
+            setIsFullscreen(true);
+          }).catch(err => {
+            console.error('Fullscreen error:', err);
+          });
+        } else {
+          document.exitFullscreen().then(() => {
+            setIsFullscreen(false);
+          }).catch(err => {
+            console.error('Exit fullscreen error:', err);
+          });
+        }
+      }, []);
+
+      // Listen for fullscreen changes (e.g., user presses Escape)
+      useEffect(() => {
+        const handleFullscreenChange = () => {
+          setIsFullscreen(!!document.fullscreenElement);
+        };
+        document.addEventListener('fullscreenchange', handleFullscreenChange);
+        return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
+      }, []);
 
       // Apply theme on initial load
       useEffect(() => {
@@ -2884,6 +2974,8 @@
               mySpots={mySpots}
               satellites={satellites}
               onSettingsClick={() => setShowSettings(true)}
+              onFullscreenToggle={handleFullscreenToggle}
+              isFullscreen={isFullscreen}
             />
             <SettingsPanel 
               isOpen={showSettings} 
@@ -2963,7 +3055,7 @@
               >
                 {config.callsign}
               </span>
-              <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>v3.3.0</span>
+              <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>v3.5.1</span>
             </div>
             
             {/* UTC Clock */}
@@ -2987,13 +3079,28 @@
               <div><span style={{ color: 'var(--text-muted)' }}>SSN </span><span style={{ color: 'var(--accent-cyan)', fontWeight: '600' }}>{spaceWeather.data?.sunspotNumber || '--'}</span></div>
             </div>
             
-            {/* Settings Button */}
-            <button
-              onClick={() => setShowSettings(true)}
-              style={{ background: 'var(--bg-tertiary)', border: '1px solid var(--border-color)', padding: '6px 12px', borderRadius: '4px', color: 'var(--text-secondary)', fontSize: '13px', cursor: 'pointer' }}
-            >
-              ⚙ Settings
-            </button>
+            {/* Settings & Fullscreen Buttons */}
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button
+                onClick={() => setShowSettings(true)}
+                style={{ background: 'var(--bg-tertiary)', border: '1px solid var(--border-color)', padding: '6px 12px', borderRadius: '4px', color: 'var(--text-secondary)', fontSize: '13px', cursor: 'pointer' }}
+              >
+                ⚙ Settings
+              </button>
+              <button
+                onClick={handleFullscreenToggle}
+                style={{ 
+                  background: isFullscreen ? 'rgba(0, 255, 136, 0.15)' : 'var(--bg-tertiary)', 
+                  border: `1px solid ${isFullscreen ? 'var(--accent-green)' : 'var(--border-color)'}`, 
+                  padding: '6px 12px', borderRadius: '4px', 
+                  color: isFullscreen ? 'var(--accent-green)' : 'var(--text-secondary)', 
+                  fontSize: '13px', cursor: 'pointer' 
+                }}
+                title={isFullscreen ? "Exit Fullscreen (Esc)" : "Enter Fullscreen"}
+              >
+                {isFullscreen ? '⛶ Exit' : '⛶ Full'}
+              </button>
+            </div>
           </div>
           
           {/* LEFT SIDEBAR */}
