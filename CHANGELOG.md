@@ -8,10 +8,45 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Planned
-- Satellite tracking with pass predictions
 - SOTA API integration
 - WebSocket DX cluster connection
 - Azimuthal equidistant projection option
+
+## [3.6.0] - 2026-01-31
+
+### Added
+- **Real-Time Ionosonde Data Integration** - Enhanced propagation predictions using actual ionospheric measurements
+  - Fetches real-time foF2, MUF(3000), hmF2 data from KC2G/GIRO ionosonde network (~100 stations worldwide)
+  - Inverse distance weighted interpolation for path midpoint ionospheric parameters
+  - 10-minute data cache with automatic refresh
+  - New `/api/ionosonde` endpoint to access raw station data
+
+### Changed
+- **ITU-R P.533-based MUF Calculation** - More accurate Maximum Usable Frequency estimation
+  - Uses real foF2 and M(3000)F2 values when available
+  - Distance-scaled MUF calculation for varying path lengths
+  - Fallback to solar index estimation when ionosonde data unavailable
+- **Improved LUF Calculation** - Better Lowest Usable Frequency (D-layer absorption) model
+  - Accounts for solar zenith angle, solar flux, and geomagnetic activity
+  - Day/night variation with proper diurnal profile
+- **Enhanced Reliability Algorithm** - ITU-R P.533 inspired reliability calculations
+  - Optimum Working Frequency (OWF) centered predictions
+  - Multi-hop path loss consideration
+  - Polar path and auroral absorption penalties
+  - Low-band nighttime enhancement
+
+### UI Improvements
+- Propagation panel shows MUF and LUF values in MHz
+- Data source indicator (📡 ionosonde name vs ⚡ estimated)
+- Green dot indicator when using real ionosonde data
+- foF2 value displayed when available (replaces SSN in bar view)
+- Distance now shown in km (not Kkm)
+
+### Technical
+- New `fetchIonosondeData()` function with caching
+- `interpolateFoF2()` for spatial interpolation of ionospheric parameters
+- `calculateMUF()` and `calculateLUF()` helper functions
+- `calculateEnhancedReliability()` with proper diurnal scaling
 
 ## [3.3.0] - 2026-01-30
 

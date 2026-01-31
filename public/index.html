@@ -1191,7 +1191,10 @@
         );
       }
 
-      const { solarData, distance, currentBands, currentHour, hourlyPredictions } = propagation;
+      const { solarData, distance, currentBands, currentHour, hourlyPredictions, muf, luf, ionospheric, dataSource } = propagation;
+      
+      // Check if we have real ionosonde data
+      const hasRealData = ionospheric?.method === 'direct' || ionospheric?.method === 'interpolated';
       
       // Get reliability color for heat map (VOACAP style - red=good, green=poor)
       const getHeatColor = (rel) => {
@@ -1228,9 +1231,36 @@
       return (
         <div className="panel" style={{ cursor: 'pointer' }} onClick={() => setViewMode(v => v === 'bars' ? 'chart' : 'bars')}>
           <div className="panel-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span>📡 VOACAP DE-DX</span>
+            <span>📡 HF Propagation {hasRealData && <span style={{ color: '#00ff88', fontSize: '10px' }}>●</span>}</span>
             <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
               {viewMode === 'bars' ? '▦ bars' : '▤ chart'} • click to toggle
+            </span>
+          </div>
+          
+          {/* MUF/LUF and Data Source Info */}
+          <div style={{ 
+            display: 'flex', 
+            justifyContent: 'space-between',
+            padding: '4px 8px',
+            background: hasRealData ? 'rgba(0, 255, 136, 0.1)' : 'var(--bg-tertiary)',
+            borderRadius: '4px',
+            marginBottom: '4px',
+            fontSize: '11px'
+          }}>
+            <div style={{ display: 'flex', gap: '12px' }}>
+              <span>
+                <span style={{ color: 'var(--text-muted)' }}>MUF </span>
+                <span style={{ color: '#ff8800', fontWeight: '600' }}>{muf || '?'}</span>
+                <span style={{ color: 'var(--text-muted)' }}> MHz</span>
+              </span>
+              <span>
+                <span style={{ color: 'var(--text-muted)' }}>LUF </span>
+                <span style={{ color: '#00aaff', fontWeight: '600' }}>{luf || '?'}</span>
+                <span style={{ color: 'var(--text-muted)' }}> MHz</span>
+              </span>
+            </div>
+            <span style={{ color: hasRealData ? '#00ff88' : 'var(--text-muted)', fontSize: '10px' }}>
+              {hasRealData ? `📡 ${ionospheric?.source || 'ionosonde'}` : '⚡ estimated'}
             </span>
           </div>
           
@@ -1300,7 +1330,7 @@
                 display: 'flex', 
                 justifyContent: 'space-between',
                 alignItems: 'center',
-                fontSize: '12px'
+                fontSize: '11px'
               }}>
                 <div style={{ display: 'flex', gap: '2px', alignItems: 'center' }}>
                   <span style={{ color: 'var(--text-muted)' }}>REL:</span>
@@ -1312,7 +1342,7 @@
                   <div style={{ width: '8px', height: '8px', background: '#ff0000', borderRadius: '1px' }} />
                 </div>
                 <div style={{ color: 'var(--text-muted)' }}>
-                  {Math.round(distance/1000)}Kkm, SSN={solarData.ssn}
+                  {Math.round(distance)}km • {ionospheric?.foF2 ? `foF2=${ionospheric.foF2}` : `SSN=${solarData.ssn}`}
                 </div>
               </div>
             </div>
@@ -1327,10 +1357,14 @@
                 marginBottom: '4px',
                 background: 'var(--bg-tertiary)',
                 borderRadius: '4px',
-                fontSize: '12px'
+                fontSize: '11px'
               }}>
                 <span><span style={{ color: 'var(--text-muted)' }}>SFI </span><span style={{ color: 'var(--accent-amber)' }}>{solarData.sfi}</span></span>
-                <span><span style={{ color: 'var(--text-muted)' }}>SSN </span><span style={{ color: 'var(--accent-cyan)' }}>{solarData.ssn}</span></span>
+                {ionospheric?.foF2 ? (
+                  <span><span style={{ color: 'var(--text-muted)' }}>foF2 </span><span style={{ color: '#00ff88' }}>{ionospheric.foF2}</span></span>
+                ) : (
+                  <span><span style={{ color: 'var(--text-muted)' }}>SSN </span><span style={{ color: 'var(--accent-cyan)' }}>{solarData.ssn}</span></span>
+                )}
                 <span><span style={{ color: 'var(--text-muted)' }}>K </span><span style={{ color: solarData.kIndex >= 4 ? '#ff4444' : '#00ff88' }}>{solarData.kIndex}</span></span>
               </div>
               
@@ -2585,7 +2619,7 @@
           {/* BOTTOM - Footer */}
           <div style={{ ...panelStyle, gridRow: '3', gridColumn: '1 / -1', display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 12px' }}>
             <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-              OpenHamClock v3.5.1 • In memory of Elwood Downey WB0OEW
+              OpenHamClock v3.6.0 • In memory of Elwood Downey WB0OEW
             </span>
             <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
               Click map to set DX • 73 de {config.callsign}
@@ -3170,7 +3204,7 @@
               >
                 {config.callsign}
               </span>
-              <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>v3.5.1</span>
+              <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>v3.6.0</span>
             </div>
             
             {/* UTC Clock */}

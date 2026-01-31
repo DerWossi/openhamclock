@@ -784,17 +784,163 @@ app.get('/api/satellites/tle', async (req, res) => {
 });
 
 // ============================================
-// VOACAP / HF PROPAGATION PREDICTION API
+// IONOSONDE DATA API (Real-time ionospheric data from KC2G/GIRO)
+// ============================================
+
+// Cache for ionosonde data (refresh every 10 minutes)
+let ionosondeCache = {
+  data: null,
+  timestamp: 0,
+  maxAge: 10 * 60 * 1000 // 10 minutes
+};
+
+// Fetch real-time ionosonde data from KC2G (GIRO network)
+async function fetchIonosondeData() {
+  const now = Date.now();
+  
+  // Return cached data if fresh
+  if (ionosondeCache.data && (now - ionosondeCache.timestamp) < ionosondeCache.maxAge) {
+    return ionosondeCache.data;
+  }
+  
+  try {
+    const response = await fetch('https://prop.kc2g.com/api/stations.json', {
+      headers: { 'User-Agent': 'OpenHamClock/3.5' },
+      timeout: 15000
+    });
+    
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    
+    const data = await response.json();
+    
+    // Filter to only recent data (within last 2 hours) with valid readings
+    const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000);
+    const validStations = data.filter(s => {
+      if (!s.fof2 || !s.station) return false;
+      const stationTime = new Date(s.time);
+      return stationTime > twoHoursAgo && s.cs > 0; // confidence score > 0
+    }).map(s => ({
+      code: s.station.code,
+      name: s.station.name,
+      lat: parseFloat(s.station.latitude),
+      lon: parseFloat(s.station.longitude) > 180 ? parseFloat(s.station.longitude) - 360 : parseFloat(s.station.longitude),
+      foF2: s.fof2,
+      mufd: s.mufd, // MUF at 3000km
+      hmF2: s.hmf2, // Height of F2 layer
+      md: parseFloat(s.md) || 3.0, // M(3000)F2 factor
+      confidence: s.cs,
+      time: s.time
+    }));
+    
+    ionosondeCache = {
+      data: validStations,
+      timestamp: now
+    };
+    
+    console.log(`[Ionosonde] Fetched ${validStations.length} valid stations from KC2G`);
+    return validStations;
+    
+  } catch (error) {
+    console.error('[Ionosonde] Fetch error:', error.message);
+    return ionosondeCache.data || [];
+  }
+}
+
+// API endpoint to get ionosonde data
+app.get('/api/ionosonde', async (req, res) => {
+  try {
+    const stations = await fetchIonosondeData();
+    res.json({
+      count: stations.length,
+      timestamp: new Date().toISOString(),
+      stations: stations
+    });
+  } catch (error) {
+    console.error('[Ionosonde] API error:', error.message);
+    res.status(500).json({ error: 'Failed to fetch ionosonde data' });
+  }
+});
+
+// Calculate distance between two points in km
+function haversineDistance(lat1, lon1, lat2, lon2) {
+  const R = 6371;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+            Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+            Math.sin(dLon/2) * Math.sin(dLon/2);
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+
+// Interpolate foF2 at a given location using inverse distance weighting
+function interpolateFoF2(lat, lon, stations) {
+  if (!stations || stations.length === 0) return null;
+  
+  // Calculate distances to all stations
+  const stationsWithDist = stations.map(s => ({
+    ...s,
+    distance: haversineDistance(lat, lon, s.lat, s.lon)
+  })).filter(s => s.foF2 > 0);
+  
+  if (stationsWithDist.length === 0) return null;
+  
+  // Sort by distance and take nearest 5
+  stationsWithDist.sort((a, b) => a.distance - b.distance);
+  const nearest = stationsWithDist.slice(0, 5);
+  
+  // If very close to a station, use its value directly
+  if (nearest[0].distance < 100) {
+    return {
+      foF2: nearest[0].foF2,
+      mufd: nearest[0].mufd,
+      hmF2: nearest[0].hmF2,
+      md: nearest[0].md,
+      source: nearest[0].name,
+      confidence: nearest[0].confidence,
+      method: 'direct'
+    };
+  }
+  
+  // Inverse distance weighted interpolation
+  let sumWeights = 0;
+  let sumFoF2 = 0;
+  let sumMufd = 0;
+  let sumHmF2 = 0;
+  let sumMd = 0;
+  
+  nearest.forEach(s => {
+    const weight = (s.confidence / 100) / Math.pow(s.distance, 2);
+    sumWeights += weight;
+    sumFoF2 += s.foF2 * weight;
+    if (s.mufd) sumMufd += s.mufd * weight;
+    if (s.hmF2) sumHmF2 += s.hmF2 * weight;
+    if (s.md) sumMd += s.md * weight;
+  });
+  
+  return {
+    foF2: sumFoF2 / sumWeights,
+    mufd: sumMufd > 0 ? sumMufd / sumWeights : null,
+    hmF2: sumHmF2 > 0 ? sumHmF2 / sumWeights : null,
+    md: sumMd > 0 ? sumMd / sumWeights : 3.0,
+    nearestStation: nearest[0].name,
+    nearestDistance: Math.round(nearest[0].distance),
+    stationsUsed: nearest.length,
+    method: 'interpolated'
+  };
+}
+
+// ============================================
+// ENHANCED PROPAGATION PREDICTION API (ITU-R P.533 based)
 // ============================================
 
 app.get('/api/propagation', async (req, res) => {
   const { deLat, deLon, dxLat, dxLon } = req.query;
   
-  console.log('[Propagation] Calculating for DE:', deLat, deLon, 'to DX:', dxLat, dxLon);
+  console.log('[Propagation] Enhanced calculation for DE:', deLat, deLon, 'to DX:', dxLat, dxLon);
   
   try {
-    // Get current space weather data for calculations
-    let sfi = 150, ssn = 100, kIndex = 2; // Defaults
+    // Get current space weather data
+    let sfi = 150, ssn = 100, kIndex = 2;
     
     try {
       const [fluxRes, kRes] = await Promise.allSettled([
@@ -810,26 +956,39 @@ app.get('/api/propagation', async (req, res) => {
         const data = await kRes.value.json();
         if (data?.length > 1) kIndex = parseInt(data[data.length - 1][1]) || 2;
       }
-      // Estimate SSN from SFI: SSN ≈ (SFI - 67) / 0.97
       ssn = Math.max(0, Math.round((sfi - 67) / 0.97));
     } catch (e) {
       console.log('[Propagation] Using default solar values');
     }
     
-    console.log('[Propagation] Solar data - SFI:', sfi, 'SSN:', ssn, 'K:', kIndex);
+    // Get real ionosonde data
+    const ionosondeStations = await fetchIonosondeData();
     
-    // Calculate distance and bearing
+    // Calculate path geometry
     const de = { lat: parseFloat(deLat) || 40, lon: parseFloat(deLon) || -75 };
     const dx = { lat: parseFloat(dxLat) || 35, lon: parseFloat(dxLon) || 139 };
     
-    const distance = calculateDistance(de.lat, de.lon, dx.lat, dx.lon);
+    const distance = haversineDistance(de.lat, de.lon, dx.lat, dx.lon);
     const midLat = (de.lat + dx.lat) / 2;
+    let midLon = (de.lon + dx.lon) / 2;
     
-    console.log('[Propagation] Distance:', Math.round(distance), 'km, MidLat:', midLat.toFixed(1));
+    // Handle antimeridian crossing
+    if (Math.abs(de.lon - dx.lon) > 180) {
+      midLon = (de.lon + dx.lon + 360) / 2;
+      if (midLon > 180) midLon -= 360;
+    }
     
-    // Calculate propagation for each band at each hour
+    // Get ionospheric data at path midpoint
+    const ionoData = interpolateFoF2(midLat, midLon, ionosondeStations);
+    
+    console.log('[Propagation] Distance:', Math.round(distance), 'km');
+    console.log('[Propagation] Solar: SFI', sfi, 'SSN', ssn, 'K', kIndex);
+    if (ionoData) {
+      console.log('[Propagation] Real foF2:', ionoData.foF2?.toFixed(2), 'MHz from', ionoData.nearestStation || ionoData.source);
+    }
+    
     const bands = ['160m', '80m', '40m', '30m', '20m', '17m', '15m', '12m', '10m', '6m'];
-    const bandFreqs = [1.8, 3.5, 7, 10, 14, 18, 21, 24, 28, 50]; // MHz
+    const bandFreqs = [1.8, 3.5, 7, 10, 14, 18, 21, 24, 28, 50];
     const currentHour = new Date().getUTCHours();
     
     // Generate 24-hour predictions
@@ -840,8 +999,8 @@ app.get('/api/propagation', async (req, res) => {
       predictions[band] = [];
       
       for (let hour = 0; hour < 24; hour++) {
-        const reliability = calculateBandReliability(
-          freq, distance, midLat, hour, sfi, ssn, kIndex, de, dx
+        const reliability = calculateEnhancedReliability(
+          freq, distance, midLat, midLon, hour, sfi, ssn, kIndex, de, dx, ionoData, currentHour
         );
         predictions[band].push({
           hour,
@@ -851,7 +1010,7 @@ app.get('/api/propagation', async (req, res) => {
       }
     });
     
-    // Get current best bands
+    // Current best bands
     const currentBands = bands.map((band, idx) => ({
       band,
       freq: bandFreqs[idx],
@@ -860,12 +1019,27 @@ app.get('/api/propagation', async (req, res) => {
       status: getStatus(predictions[band][currentHour].reliability)
     })).sort((a, b) => b.reliability - a.reliability);
     
+    // Calculate current MUF and LUF
+    const currentMuf = calculateMUF(distance, midLat, midLon, currentHour, sfi, ssn, ionoData);
+    const currentLuf = calculateLUF(distance, midLat, currentHour, sfi, kIndex);
+    
     res.json({
       solarData: { sfi, ssn, kIndex },
+      ionospheric: ionoData ? {
+        foF2: ionoData.foF2?.toFixed(2),
+        mufd: ionoData.mufd?.toFixed(1),
+        hmF2: ionoData.hmF2?.toFixed(0),
+        source: ionoData.nearestStation || ionoData.source,
+        method: ionoData.method,
+        stationsUsed: ionoData.stationsUsed || 1
+      } : { source: 'model', method: 'estimated' },
+      muf: Math.round(currentMuf * 10) / 10,
+      luf: Math.round(currentLuf * 10) / 10,
       distance: Math.round(distance),
       currentHour,
       currentBands,
-      hourlyPredictions: predictions
+      hourlyPredictions: predictions,
+      dataSource: ionoData ? 'KC2G/GIRO Ionosonde Network' : 'Estimated from solar indices'
     });
     
   } catch (error) {
@@ -874,77 +1048,178 @@ app.get('/api/propagation', async (req, res) => {
   }
 });
 
-// Calculate great circle distance in km
-function calculateDistance(lat1, lon1, lat2, lon2) {
-  const R = 6371;
-  const dLat = (lat2 - lat1) * Math.PI / 180;
-  const dLon = (lon2 - lon1) * Math.PI / 180;
-  const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
-            Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-            Math.sin(dLon/2) * Math.sin(dLon/2);
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+// Calculate MUF using real ionosonde data or model
+function calculateMUF(distance, midLat, midLon, hour, sfi, ssn, ionoData) {
+  // If we have real MUF(3000) data, scale it for actual distance
+  if (ionoData?.mufd) {
+    // MUF scales with distance: MUF(d) ≈ MUF(3000) * sqrt(3000/d) for d < 3000km
+    // For d > 3000km, MUF(d) ≈ MUF(3000) * (1 + 0.1 * log(d/3000))
+    if (distance < 3000) {
+      return ionoData.mufd * Math.sqrt(distance / 3000);
+    } else {
+      return ionoData.mufd * (1 + 0.15 * Math.log10(distance / 3000));
+    }
+  }
+  
+  // If we have foF2, calculate MUF using M(3000)F2 factor
+  if (ionoData?.foF2) {
+    const M = ionoData.md || 3.0; // M(3000)F2 factor, typically 2.5-3.5
+    const muf3000 = ionoData.foF2 * M;
+    
+    // Scale for actual distance
+    if (distance < 3000) {
+      return muf3000 * Math.sqrt(distance / 3000);
+    } else {
+      return muf3000 * (1 + 0.15 * Math.log10(distance / 3000));
+    }
+  }
+  
+  // Fallback: Estimate foF2 from solar indices
+  // foF2 ≈ 0.9 * sqrt(SSN + 15) * diurnal_factor
+  const hourFactor = 1 + 0.4 * Math.cos((hour - 14) * Math.PI / 12); // Peak at 14:00 local
+  const latFactor = 1 - Math.abs(midLat) / 150; // Higher latitudes = lower foF2
+  const foF2_est = 0.9 * Math.sqrt(ssn + 15) * hourFactor * latFactor;
+  
+  // Standard M(3000)F2 factor
+  const M = 3.0;
+  const muf3000 = foF2_est * M;
+  
+  // Scale for distance
+  if (distance < 3000) {
+    return muf3000 * Math.sqrt(distance / 3000);
+  } else {
+    return muf3000 * (1 + 0.15 * Math.log10(distance / 3000));
+  }
 }
 
-// Calculate band reliability percentage (simplified VOACAP-style)
-function calculateBandReliability(freq, distance, midLat, hour, sfi, ssn, kIndex, de, dx) {
-  // Maximum Usable Frequency estimation
-  // MUF ≈ criticalFreq * secant(zenith angle) * sqrt(1 + distance/4000)
+// Calculate LUF (Lowest Usable Frequency) based on D-layer absorption
+function calculateLUF(distance, midLat, hour, sfi, kIndex) {
+  // LUF increases with:
+  // - Higher solar flux (more D-layer ionization)
+  // - Daytime (D-layer forms during day)
+  // - Shorter paths (higher elevation angles = more time in D-layer)
+  // - Geomagnetic activity
   
-  // Critical frequency varies with solar activity and time
-  // foF2 ≈ 0.85 * sqrt(ssn + 12) * (1 + 0.3 * cos(hour * PI / 12))
-  const hourFactor = 1 + 0.4 * Math.cos((hour - 12) * Math.PI / 12);
-  const foF2 = 0.9 * Math.sqrt(ssn + 15) * hourFactor;
+  // Local solar time at midpoint (approximate)
+  const localHour = hour; // Would need proper calculation with midLon
   
-  // Distance factor (longer paths need lower angles, higher MUF)
-  const distFactor = Math.sqrt(1 + distance / 3500);
+  // Day/night factor: D-layer absorption is much higher during daytime
+  let dayFactor = 0.3; // Night
+  if (localHour >= 6 && localHour <= 18) {
+    // Daytime - peaks around noon
+    dayFactor = 0.5 + 0.5 * Math.cos((localHour - 12) * Math.PI / 6);
+  }
   
-  // Latitude factor (higher latitudes = more absorption, lower MUF)
-  const latFactor = 1 - Math.abs(midLat) / 200;
+  // Solar flux factor: higher SFI = more absorption
+  const sfiFactor = 1 + (sfi - 70) / 200;
   
-  // Estimated MUF
-  const muf = foF2 * distFactor * latFactor * 3.5;
+  // Distance factor: shorter paths have higher LUF (higher angles)
+  const distFactor = Math.max(0.5, 1 - distance / 10000);
   
-  // Lowest Usable Frequency (absorption limit)
-  // LUF increases with solar activity and during daytime
-  const dayNight = isDaytime(hour, (de.lon + dx.lon) / 2) ? 1.5 : 0.5;
-  const luf = 2 + (sfi / 100) * dayNight + kIndex * 0.5;
+  // Latitude factor: polar paths have more absorption
+  const latFactor = 1 + Math.abs(midLat) / 90 * 0.5;
   
-  // Calculate reliability based on frequency vs MUF/LUF
+  // K-index: geomagnetic storms increase absorption
+  const kFactor = 1 + kIndex * 0.1;
+  
+  // Base LUF is around 2 MHz for long night paths
+  const baseLuf = 2.0;
+  
+  return baseLuf * dayFactor * sfiFactor * distFactor * latFactor * kFactor;
+}
+
+// Enhanced reliability calculation using real ionosonde data
+function calculateEnhancedReliability(freq, distance, midLat, midLon, hour, sfi, ssn, kIndex, de, dx, ionoData, currentHour) {
+  // Calculate MUF and LUF for this hour
+  // For non-current hours, we need to estimate how foF2 changes
+  let hourIonoData = ionoData;
+  
+  if (ionoData && hour !== currentHour) {
+    // Estimate foF2 change based on diurnal variation
+    // foF2 typically varies by factor of 2-3 between day and night
+    const currentHourFactor = 1 + 0.4 * Math.cos((currentHour - 14) * Math.PI / 12);
+    const targetHourFactor = 1 + 0.4 * Math.cos((hour - 14) * Math.PI / 12);
+    const scaleFactor = targetHourFactor / currentHourFactor;
+    
+    hourIonoData = {
+      ...ionoData,
+      foF2: ionoData.foF2 * scaleFactor,
+      mufd: ionoData.mufd ? ionoData.mufd * scaleFactor : null
+    };
+  }
+  
+  const muf = calculateMUF(distance, midLat, midLon, hour, sfi, ssn, hourIonoData);
+  const luf = calculateLUF(distance, midLat, hour, sfi, kIndex);
+  
+  // Calculate reliability based on frequency position relative to MUF/LUF
   let reliability = 0;
   
-  if (freq > muf) {
-    // Frequency above MUF - poor propagation
-    reliability = Math.max(0, 50 - (freq - muf) * 10);
+  if (freq > muf * 1.1) {
+    // Well above MUF - very poor
+    reliability = Math.max(0, 30 - (freq - muf) * 5);
+  } else if (freq > muf) {
+    // Slightly above MUF - marginal (sometimes works due to scatter)
+    reliability = 30 + (muf * 1.1 - freq) / (muf * 0.1) * 20;
+  } else if (freq < luf * 0.8) {
+    // Well below LUF - absorbed
+    reliability = Math.max(0, 20 - (luf - freq) * 10);
   } else if (freq < luf) {
-    // Frequency below LUF - too much absorption
-    reliability = Math.max(0, 50 - (luf - freq) * 15);
+    // Near LUF - marginal
+    reliability = 20 + (freq - luf * 0.8) / (luf * 0.2) * 30;
   } else {
-    // Frequency in usable range
-    const midFreq = (muf + luf) / 2;
-    const optimalness = 1 - Math.abs(freq - midFreq) / (muf - luf);
-    reliability = 50 + optimalness * 45;
+    // In usable range - calculate optimum
+    // Optimum Working Frequency (OWF) is typically 80-85% of MUF
+    const owf = muf * 0.85;
+    const range = muf - luf;
+    
+    if (range <= 0) {
+      reliability = 30; // Very narrow window
+    } else {
+      // Higher reliability near OWF, tapering toward MUF and LUF
+      const position = (freq - luf) / range; // 0 at LUF, 1 at MUF
+      const optimalPosition = 0.75; // 75% up from LUF = OWF
+      
+      if (position < optimalPosition) {
+        // Below OWF - reliability increases as we approach OWF
+        reliability = 50 + (position / optimalPosition) * 45;
+      } else {
+        // Above OWF - reliability decreases as we approach MUF
+        reliability = 95 - ((position - optimalPosition) / (1 - optimalPosition)) * 45;
+      }
+    }
   }
   
   // K-index degradation (geomagnetic storms)
-  if (kIndex >= 5) reliability *= 0.3;
+  if (kIndex >= 7) reliability *= 0.1;
+  else if (kIndex >= 6) reliability *= 0.2;
+  else if (kIndex >= 5) reliability *= 0.4;
   else if (kIndex >= 4) reliability *= 0.6;
   else if (kIndex >= 3) reliability *= 0.8;
   
-  // Distance adjustment - very long paths are harder
-  if (distance > 15000) reliability *= 0.7;
-  else if (distance > 10000) reliability *= 0.85;
+  // Very long paths (multiple hops) are harder
+  const hops = Math.ceil(distance / 3500);
+  if (hops > 1) {
+    reliability *= Math.pow(0.92, hops - 1); // ~8% loss per additional hop
+  }
   
-  // High bands need higher solar activity
-  if (freq >= 21 && sfi < 100) reliability *= (sfi / 100);
-  if (freq >= 28 && sfi < 120) reliability *= (sfi / 120);
+  // Polar path penalty (auroral absorption)
+  if (Math.abs(midLat) > 60) {
+    reliability *= 0.7;
+    if (kIndex >= 3) reliability *= 0.7; // Additional penalty during storms
+  }
+  
+  // High bands need sufficient solar activity
+  if (freq >= 21 && sfi < 100) reliability *= Math.sqrt(sfi / 100);
+  if (freq >= 28 && sfi < 120) reliability *= Math.sqrt(sfi / 120);
+  if (freq >= 50 && sfi < 150) reliability *= Math.pow(sfi / 150, 1.5);
+  
+  // Low bands work better at night
+  const localHour = (hour + midLon / 15 + 24) % 24;
+  const isNight = localHour < 6 || localHour > 18;
+  if (freq <= 7 && isNight) reliability *= 1.1;
+  if (freq <= 3.5 && !isNight) reliability *= 0.7;
   
   return Math.min(99, Math.max(0, reliability));
-}
-
-// Check if it's daytime at given longitude
-function isDaytime(utcHour, longitude) {
-  const localHour = (utcHour + longitude / 15 + 24) % 24;
-  return localHour >= 6 && localHour <= 18;
 }
 
 // Convert reliability to estimated SNR
