@@ -77,7 +77,7 @@ function generateInputFile(params) {
   // Format frequencies
   const freqList = frequencies.map(f => f.toFixed(3)).join(' ');
   
-  // ITURHFProp input file format
+  // ITURHFProp input file format - complete version
   const input = `PathName "OpenHamClock"
 Path.L_tx.lat ${txLat.toFixed(4)}
 Path.L_tx.lng ${txLon.toFixed(4)}
@@ -95,8 +95,8 @@ Path.Relr ${requiredReliability}
 Path.ManMadeNoise ${manMadeNoise}
 Path.Modulation ANALOG
 Path.SorL SHORTPATH
-TXAntFilePath "${ITURHFPROP_DATA}/Data/Isotropic.ant"
-RXAntFilePath "${ITURHFPROP_DATA}/Data/Isotropic.ant"
+TXAntFilePath "ISOTROPIC"
+RXAntFilePath "ISOTROPIC"
 DataFilePath "${ITURHFPROP_DATA}/Data/"
 `;
 
@@ -370,8 +370,8 @@ app.get('/api/diag', async (req, res) => {
 Path.L_tx.lng -75.0
 Path.L_rx.lat 51.0
 Path.L_rx.lng 0.0
-Path.year 2026
-Path.month 2
+Path.year 2025
+Path.month 6
 Path.hour 12
 Path.SSN 100
 Path.frequency 14.0
@@ -382,8 +382,8 @@ Path.Relr 90
 Path.ManMadeNoise RESIDENTIAL
 Path.Modulation ANALOG
 Path.SorL SHORTPATH
-TXAntFilePath "${ITURHFPROP_DATA}/Data/Isotropic.ant"
-RXAntFilePath "${ITURHFPROP_DATA}/Data/Isotropic.ant"
+TXAntFilePath "ISOTROPIC"
+RXAntFilePath "ISOTROPIC"
 DataFilePath "${ITURHFPROP_DATA}/Data/"
 `;
     fs.writeFileSync('/tmp/test_input.txt', testInput);
