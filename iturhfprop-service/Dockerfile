@@ -56,6 +56,18 @@ RUN mkdir -p /opt/iturhfprop/Data \
 # Cleanup
 RUN rm -rf ITU-R-HF-14.3 source.tar.gz
 
+# Create Isotropic antenna file (Type 13 format)
+# Format: Name, Type, Frequency(MHz), then elevation/gain pairs
+RUN printf 'Isotropic\n' > /opt/iturhfprop/Data/Isotropic.ant \
+    && printf '13\n' >> /opt/iturhfprop/Data/Isotropic.ant \
+    && printf '14.0\n' >> /opt/iturhfprop/Data/Isotropic.ant \
+    && printf '37\n' >> /opt/iturhfprop/Data/Isotropic.ant \
+    && for i in $(seq 0 5 180); do printf '%d 0.0\n' $i >> /opt/iturhfprop/Data/Isotropic.ant; done \
+    && echo "=== Created Isotropic.ant ===" \
+    && cat /opt/iturhfprop/Data/Isotropic.ant \
+    && echo "=== Final file count ===" \
+    && ls /opt/iturhfprop/Data/ | wc -l
+
 # Set library path so ITURHFProp can find shared libs
 ENV LD_LIBRARY_PATH=/opt/iturhfprop:$LD_LIBRARY_PATH
 

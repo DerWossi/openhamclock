@@ -77,7 +77,7 @@ function generateInputFile(params) {
   // Format frequencies
   const freqList = frequencies.map(f => f.toFixed(3)).join(' ');
   
-  // ITURHFProp input file format - minimal version without external antenna files
+  // ITURHFProp input file format
   const input = `PathName "OpenHamClock"
 Path.L_tx.lat ${txLat.toFixed(4)}
 Path.L_tx.lng ${txLon.toFixed(4)}
@@ -95,6 +95,8 @@ Path.Relr ${requiredReliability}
 Path.ManMadeNoise ${manMadeNoise}
 Path.Modulation ANALOG
 Path.SorL SHORTPATH
+TXAntFilePath "${ITURHFPROP_DATA}/Data/Isotropic.ant"
+RXAntFilePath "${ITURHFPROP_DATA}/Data/Isotropic.ant"
 DataFilePath "${ITURHFPROP_DATA}/Data/"
 `;
 
@@ -380,6 +382,8 @@ Path.Relr 90
 Path.ManMadeNoise RESIDENTIAL
 Path.Modulation ANALOG
 Path.SorL SHORTPATH
+TXAntFilePath "${ITURHFPROP_DATA}/Data/Isotropic.ant"
+RXAntFilePath "${ITURHFPROP_DATA}/Data/Isotropic.ant"
 DataFilePath "${ITURHFPROP_DATA}/Data/"
 `;
     fs.writeFileSync('/tmp/test_input.txt', testInput);
