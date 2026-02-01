@@ -190,13 +190,16 @@ app.get('/api/dxpeditions', async (req, res) => {
     
     const dxpeditions = [];
     
-    // Split by bullet separator (·) or newlines
-    const entries = text.split(/\s*·\s*|\n+/).filter(e => e.trim().length > 30);
+    // Each entry starts with a date pattern like "Jan 1-Feb 16, 2026 DXCC:"
+    // Split on date patterns that are followed by DXCC
+    const entryPattern = /((?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{1,2}[^D]*?DXCC:[^·]+?)(?=(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{1,2}|$)/gi;
+    const entries = text.match(entryPattern) || [];
+    
     console.log('[DXpeditions] Found', entries.length, 'potential entries');
     
-    // Log first 3 complete entries for debugging
+    // Log first 3 entries for debugging
     entries.slice(0, 3).forEach((e, i) => {
-      console.log(`[DXpeditions] Entry ${i}:`, e.substring(0, 200));
+      console.log(`[DXpeditions] Entry ${i}:`, e.substring(0, 150));
     });
     
     for (const entry of entries) {
@@ -246,7 +249,8 @@ app.get('/api/dxpeditions', async (req, res) => {
       // Extract other fields
       const qslMatch = entry.match(/QSL:\s*([A-Za-z0-9]+)/i);
       const infoMatch = entry.match(/Info:\s*(.+)/i);
-      const dateMatch = entry.match(/([A-Za-z]{3}\s+\d{1,2}(?:,?\s*\d{4})?(?:\s*[-–]\s*[A-Za-z]{3}\s+\d{1,2}(?:,?\s*\d{4})?)?)/i);
+      // Date is at the start of entry: "Jan 1-Feb 16, 2026"
+      const dateMatch = entry.match(/^([A-Za-z]{3}\s+\d{1,2}[^D]*?)(?=DXCC:)/i);
       
       qsl = qslMatch ? qslMatch[1].trim() : '';
       info = infoMatch ? infoMatch[1].trim() : '';
@@ -257,6 +261,11 @@ app.get('/api/dxpeditions', async (req, res) => {
       
       // Skip obviously wrong matches
       if (/^(DXCC|QSL|INFO|SOURCE|THE|AND|FOR)$/i.test(callsign)) continue;
+      
+      // Log first few successful parses
+      if (dxpeditions.length < 3) {
+        console.log(`[DXpeditions] Parsed: ${callsign} - ${entity} - ${dateStr}`);
+      }
       
       // Try to extract entity from context if not found
       if (!entity && info) {
