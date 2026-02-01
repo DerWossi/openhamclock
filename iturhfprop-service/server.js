@@ -92,7 +92,7 @@ RXGOS 0.0
 AntennaOrientation "TX2RX"
 Path.year ${year}
 Path.month ${month}
-Path.hour ${hour === 0 ? 24 : hour}
+Path.hour ${isNaN(hour) ? 12 : (hour === 0 ? 24 : hour)}
 Path.SSN ${ssn}
 Path.frequency ${freqList}
 Path.txpower ${(10 * Math.log10(txPower / 1000)).toFixed(1)}
@@ -500,7 +500,7 @@ app.get('/api/predict', async (req, res) => {
       rxLon: parseFloat(rxLon),
       year: parseInt(year),
       month: parseInt(month) || new Date().getMonth() + 1,
-      hour: parseInt(hour) || new Date().getUTCHours(),
+      hour: parseInt(hour) || new Date().getUTCHours() || 12,
       ssn: parseInt(ssn) || 100,
       txPower: parseInt(txPower) || 100
     };
@@ -613,7 +613,7 @@ app.get('/api/bands', async (req, res) => {
       rxLon: parseFloat(rxLon),
       year: new Date().getFullYear(),
       month: parseInt(month) || new Date().getMonth() + 1,
-      hour: parseInt(hour) ?? new Date().getUTCHours(),
+      hour: parseInt(hour) || new Date().getUTCHours() || 12,
       ssn: parseInt(ssn) || 100,
       frequencies: Object.values(HF_BANDS)
     };
