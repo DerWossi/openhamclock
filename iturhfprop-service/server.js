@@ -20,9 +20,9 @@ const crypto = require('crypto');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Paths to ITURHFProp
+// Paths to ITURHFProp - DATA points to root which contains Data/ and IonMap/ subdirs
 const ITURHFPROP_PATH = process.env.ITURHFPROP_PATH || '/opt/iturhfprop/ITURHFProp';
-const ITURHFPROP_DATA = process.env.ITURHFPROP_DATA || '/opt/iturhfprop/Data';
+const ITURHFPROP_DATA = process.env.ITURHFPROP_DATA || '/opt/iturhfprop';
 
 // Temp directory for input/output files
 const TEMP_DIR = '/tmp/iturhfprop';
@@ -97,13 +97,13 @@ Path.Relr ${requiredReliability}
 Path.ManMadeNoise ${manMadeNoise}
 Path.Modulation ANALOG
 Path.SorL SHORTPATH
-TXAntFilePath ${ITURHFPROP_DATA}/Isotropic.ant
-RXAntFilePath ${ITURHFPROP_DATA}/Isotropic.ant
+TXAntFilePath ${ITURHFPROP_DATA}/Data/Isotropic.ant
+RXAntFilePath ${ITURHFPROP_DATA}/Data/Isotropic.ant
 TXAnt.Alt 0.0
 TXAnt.Gain ${txGain.toFixed(1)}
 RXAnt.Alt 0.0
 RXAnt.Gain ${rxGain.toFixed(1)}
-DataFilePath ${ITURHFPROP_DATA}/
+DataFilePath ${ITURHFPROP_DATA}/Data/
 `;
 
   return input;

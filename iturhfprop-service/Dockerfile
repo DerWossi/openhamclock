@@ -6,7 +6,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 # Install Node.js and utilities
 RUN apt-get update && apt-get install -y \
     curl \
-    unzip \
+    tar \
     ca-certificates \
     && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
     && apt-get install -y nodejs \
@@ -15,22 +15,26 @@ RUN apt-get update && apt-get install -y \
 # Create directory for ITURHFProp
 WORKDIR /opt/iturhfprop
 
-# Download the latest release (v14.2) - binaries zip
-RUN curl -L -o binaries.zip "https://github.com/ITU-R-Study-Group-3/ITU-R-HF/releases/download/v14.2/ITURHFProp_14_02.zip" \
-    && unzip binaries.zip \
-    && rm binaries.zip
+# Download individual binary files from v14.3 release (latest)
+RUN curl -L -o ITURHFProp "https://github.com/ITU-R-Study-Group-3/ITU-R-HF/releases/download/v14.3/ITURHFProp" \
+    && curl -L -o libp533.so "https://github.com/ITU-R-Study-Group-3/ITU-R-HF/releases/download/v14.3/libp533.so" \
+    && curl -L -o libp372.so "https://github.com/ITU-R-Study-Group-3/ITU-R-HF/releases/download/v14.3/libp372.so" \
+    && chmod +x ITURHFProp
 
-# Download required data files
-RUN curl -L -o data.zip "https://github.com/ITU-R-Study-Group-3/ITU-R-HF/releases/download/v14.2/Data.zip" \
-    && unzip data.zip \
-    && rm data.zip
+# Download source to get Data files
+RUN curl -L -o source.tar.gz "https://github.com/ITU-R-Study-Group-3/ITU-R-HF/archive/refs/tags/v14.3.tar.gz" \
+    && tar -xzf source.tar.gz \
+    && mv ITU-R-HF-14.3/Data . \
+    && mv ITU-R-HF-14.3/IonMap . \
+    && rm -rf ITU-R-HF-14.3 source.tar.gz
 
-# Make Linux binary executable and set library path
-RUN chmod +x /opt/iturhfprop/ITURHFProp || true
+# Set library path so ITURHFProp can find shared libs
 ENV LD_LIBRARY_PATH=/opt/iturhfprop:$LD_LIBRARY_PATH
 
-# List contents to verify
-RUN echo "=== ITURHFProp files ===" && ls -la /opt/iturhfprop/ && echo "=== Data files ===" && ls -la /opt/iturhfprop/Data/ 2>/dev/null || ls -la /opt/iturhfprop/data/ 2>/dev/null || echo "Data dir not found"
+# Verify installation
+RUN echo "=== Binary files ===" && ls -la /opt/iturhfprop/*.so /opt/iturhfprop/ITURHFProp \
+    && echo "=== Data directory ===" && ls /opt/iturhfprop/Data/ | head -10 \
+    && echo "=== IonMap directory ===" && ls /opt/iturhfprop/IonMap/ | head -5
 
 # Set up the API service
 WORKDIR /app
@@ -39,10 +43,10 @@ RUN npm install --production
 
 COPY server.js ./
 
-# Environment - adjust DATA path based on actual structure
+# Environment
 ENV PORT=3000
 ENV ITURHFPROP_PATH=/opt/iturhfprop/ITURHFProp
-ENV ITURHFPROP_DATA=/opt/iturhfprop/Data
+ENV ITURHFPROP_DATA=/opt/iturhfprop
 
 EXPOSE 3000
 

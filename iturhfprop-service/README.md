@@ -118,15 +118,22 @@ curl http://localhost:3000/api/health
 Download ITURHFProp binaries from the [official release](https://github.com/ITU-R-Study-Group-3/ITU-R-HF/releases):
 
 ```bash
-# Download binaries and data
-wget https://github.com/ITU-R-Study-Group-3/ITU-R-HF/releases/download/v14.2/ITURHFProp_14_02.zip
-wget https://github.com/ITU-R-Study-Group-3/ITU-R-HF/releases/download/v14.2/Data.zip
-unzip ITURHFProp_14_02.zip
-unzip Data.zip
+# Download binaries (Linux)
+curl -L -o ITURHFProp "https://github.com/ITU-R-Study-Group-3/ITU-R-HF/releases/download/v14.3/ITURHFProp"
+curl -L -o libp533.so "https://github.com/ITU-R-Study-Group-3/ITU-R-HF/releases/download/v14.3/libp533.so"
+curl -L -o libp372.so "https://github.com/ITU-R-Study-Group-3/ITU-R-HF/releases/download/v14.3/libp372.so"
+chmod +x ITURHFProp
+
+# Download source for Data files
+curl -L -o source.tar.gz "https://github.com/ITU-R-Study-Group-3/ITU-R-HF/archive/refs/tags/v14.3.tar.gz"
+tar -xzf source.tar.gz
+mv ITU-R-HF-14.3/Data .
+mv ITU-R-HF-14.3/IonMap .
 
 # Set environment variables
 export ITURHFPROP_PATH=$(pwd)/ITURHFProp
-export ITURHFPROP_DATA=$(pwd)/Data
+export ITURHFPROP_DATA=$(pwd)
+export LD_LIBRARY_PATH=$(pwd):$LD_LIBRARY_PATH
 
 # Run service
 npm install
