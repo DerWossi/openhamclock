@@ -1,10 +1,10 @@
 # WSPR Propagation Heatmap Plugin
 
-**Version:** 1.4.2  
+**Version:** 1.4.3  
 **Category:** Propagation  
 **Icon:** 📡  
 **Author:** OpenHamClock Contributors  
-**Last Updated:** 2026-02-03 (v1.4.2 Performance Fix)
+**Last Updated:** 2026-02-03 (v1.4.3 Feature Release)
 
 ---
 
@@ -14,7 +14,27 @@ The WSPR (Weak Signal Propagation Reporter) Heatmap Plugin provides real-time vi
 
 ## Features Implemented
 
-### ✅ v1.4.2 - Performance & Duplicate Control Fix (Latest)
+### ✅ v1.4.3 - Separate Opacity Controls (Latest)
+
+#### **Independent Opacity Sliders**
+- **Path Opacity**: Control visibility of propagation paths and station markers (10-100%)
+  - Affects path lines, TX markers (orange), and RX markers (blue)
+  - Default: 70%
+  - Allows dimming paths without affecting heatmap
+- **Heatmap Opacity**: Control visibility of density heatmap circles (10-100%)
+  - Affects hot spot visualization circles
+  - Default: 60%
+  - Allows dimming heatmap independently of paths
+- **Live Value Display**: Both sliders show current percentage in real-time
+- **Visual Separators**: Clean organization in filter panel
+
+#### **Use Cases**
+- Dim paths to 30% while keeping heatmap at 80% to focus on hot spots
+- Dim heatmap to 20% while keeping paths at 90% to focus on propagation
+- Fine-tune both for optimal visibility based on map type and lighting
+- Independent control prevents opacity conflicts
+
+### ✅ v1.4.2 - Performance & Duplicate Control Fix
 
 #### **Critical Bug Fix**
 - **Fixed Duplicate Popups**: No more multiple "WSPR Activity" popups spawning
@@ -182,6 +202,12 @@ The WSPR (Weak Signal Propagation Reporter) Heatmap Plugin provides real-time vi
 - **Band Selector**: Choose specific band (160m-6m) or "All Bands"
 - **Time Window**: Select 15min, 30min, 1hr, 2hr, or 6hr
 - **Min SNR**: Adjust slider to filter weak signals (-30 to +10 dB)
+- **Path Opacity**: Control visibility of paths and markers (10-100%)
+  - Adjust to dim or brighten propagation paths
+  - Does not affect heatmap
+- **Heatmap Opacity**: Control visibility of density circles (10-100%)
+  - Adjust to dim or brighten hot spots
+  - Independent of path opacity
 - **Animate Paths**: Toggle smooth pulse animation along paths
 - **Show Heatmap**: Switch to density heatmap view
 
