@@ -143,7 +143,7 @@ export function useLayer({ enabled = false, opacity = 0.9, map = null }) {
       // Size based on intensity (5-20px)
       const size = Math.min(Math.max(intensity / 10, 5), 20);
       
-      // Create lightning bolt marker
+      // Create lightning bolt marker - start with static class
       const marker = L.circleMarker([lat, lon], {
         radius: size / 2,
         fillColor: color,
@@ -151,11 +151,34 @@ export function useLayer({ enabled = false, opacity = 0.9, map = null }) {
         weight: isNew ? 3 : 1,
         opacity: opacity,
         fillOpacity: opacity * (isNew ? 1.0 : 0.7),
-        className: isNew ? 'lightning-strike-new' : 'lightning-strike'
+        className: 'lightning-strike'
       });
       
-      // Add pulsing animation for new strikes
+      // Add to map first
+      marker.addTo(map);
+      
+      // Add pulsing animation for new strikes ONLY
       if (isNew) {
+        // Wait for DOM element to be created, then add animation class
+        setTimeout(() => {
+          try {
+            if (marker._path) {
+              marker._path.classList.add('lightning-strike-new');
+              
+              // Remove animation class after it completes (0.8s)
+              setTimeout(() => {
+                try {
+                  if (marker._path) {
+                    marker._path.classList.remove('lightning-strike-new');
+                  }
+                } catch (e) {}
+              }, 800);
+            }
+          } catch (e) {
+            console.warn('Could not animate lightning marker:', e);
+          }
+        }, 10);
+        
         // Create pulsing ring effect
         const pulseRing = L.circle([lat, lon], {
           radius: 30000, // 30km radius in meters
@@ -201,7 +224,7 @@ export function useLayer({ enabled = false, opacity = 0.9, map = null }) {
         </div>
       `);
       
-      marker.addTo(map);
+      // Already added to map above (before animation)
       newMarkers.push(marker);
     });
 
