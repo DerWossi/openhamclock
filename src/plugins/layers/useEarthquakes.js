@@ -104,7 +104,15 @@ export function useLayer({ enabled = false, opacity = 0.9, map = null }) {
       else if (mag < 7) color = '#cc0000'; // Dark red - major
       else color = '#990000'; // Very dark red - great
 
-      // Create earthquake icon marker with high visibility
+      // Create earthquake icon marker with seismic wave visualization
+      const waveIcon = `
+        <svg width="${size*0.7}" height="${size*0.7}" viewBox="0 0 24 24" style="fill: white;">
+          <path d="M12 2L8 10h3v10h2V10h3L12 2z"/>
+          <path d="M4 12l2 2 2-2-2-2-2 2z"/>
+          <path d="M20 12l-2 2-2-2 2-2 2 2z"/>
+        </svg>
+      `;
+      
       const icon = L.divIcon({
         className: 'earthquake-icon',
         html: `<div style="
@@ -116,11 +124,10 @@ export function useLayer({ enabled = false, opacity = 0.9, map = null }) {
           display: flex; 
           align-items: center; 
           justify-content: center;
-          font-size: ${size * 0.7}px;
           font-weight: bold;
           border: 2px solid white;
           box-shadow: 0 2px 8px rgba(0,0,0,0.5);
-        ">🌋</div>`,
+        ">${waveIcon}</div>`,
         iconSize: [size, size],
         iconAnchor: [size/2, size/2]
       });
