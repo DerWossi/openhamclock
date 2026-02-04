@@ -2252,6 +2252,29 @@ app.get('/api/pskreporter/:callsign', async (req, res) => {
 // REVERSE BEACON NETWORK (RBN) API
 // ============================================
 
+// Convert lat/lon to Maidenhead grid (6-character)
+function latLonToGrid(lat, lon) {
+  if (!isFinite(lat) || !isFinite(lon)) return null;
+  
+  // Adjust longitude to 0-360 range
+  let adjLon = lon + 180;
+  let adjLat = lat + 90;
+  
+  // Field (2 chars): 20° lon x 10° lat
+  const field1 = String.fromCharCode(65 + Math.floor(adjLon / 20));
+  const field2 = String.fromCharCode(65 + Math.floor(adjLat / 10));
+  
+  // Square (2 digits): 2° lon x 1° lat
+  const square1 = Math.floor((adjLon % 20) / 2);
+  const square2 = Math.floor((adjLat % 10) / 1);
+  
+  // Subsquare (2 chars): 5' lon x 2.5' lat
+  const subsq1 = String.fromCharCode(65 + Math.floor(((adjLon % 2) * 60) / 5));
+  const subsq2 = String.fromCharCode(65 + Math.floor(((adjLat % 1) * 60) / 2.5));
+  
+  return `${field1}${field2}${square1}${square2}${subsq1}${subsq2}`.toUpperCase();
+}
+
 // RBN endpoint - who's hearing YOUR signal
 // Using real-time Telnet connection to RBN
 let rbnCache = new Map(); // Cache by callsign
@@ -2395,7 +2418,32 @@ app.get('/api/rbn', async (req, res) => {
     
     console.log(`[RBN] Collected ${allSpots.length} total spots, ${userSpots.length} for ${callsign}`);
     
-    const limitedSpots = userSpots.slice(0, limit);
+    // Look up grid squares for each skimmer
+    const spotsWithLocations = await Promise.all(
+      userSpots.map(async (spot) => {
+        try {
+          // Look up skimmer location via HamQTH
+          const lookupResponse = await fetch(`http://localhost:${PORT}/api/callsign/${spot.callsign}`);
+          if (lookupResponse.ok) {
+            const locationData = await lookupResponse.json();
+            // Convert lat/lon to grid square (approximate)
+            const grid = latLonToGrid(locationData.lat, locationData.lon);
+            return {
+              ...spot,
+              grid: grid,
+              skimmerLat: locationData.lat,
+              skimmerLon: locationData.lon,
+              skimmerCountry: locationData.country
+            };
+          }
+        } catch (err) {
+          console.warn(`[RBN] Failed to lookup ${spot.callsign}: ${err.message}`);
+        }
+        return spot; // Return without location if lookup fails
+      })
+    );
+    
+    const limitedSpots = spotsWithLocations.slice(0, limit);
     
     // Cache the results
     rbnCache.set(cacheKey, {
