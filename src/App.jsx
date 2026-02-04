@@ -17,7 +17,8 @@ import {
   SolarPanel,
   PropagationPanel,
   DXpeditionPanel,
-  PSKReporterPanel
+  PSKReporterPanel,
+  DXNewsTicker
 } from './components';
 
 // Hooks
@@ -698,6 +699,7 @@ const App = () => {
                 showWSJTX={mapLayers.showWSJTX}
                 onToggleSatellites={toggleSatellites}
                 hoveredSpot={hoveredSpot}
+                hideOverlays={true}
               />
             </div>
 
@@ -774,6 +776,18 @@ const App = () => {
                     </div>
                   ))}
                 </div>
+              </div>
+
+              {/* DX News - sidebar footer */}
+              <div style={{
+                flexShrink: 0,
+                borderTop: '1px solid var(--border-color)',
+                background: 'var(--bg-panel)',
+                height: '28px',
+                position: 'relative',
+                overflow: 'hidden'
+              }}>
+                <DXNewsTicker sidebar={true} />
               </div>
             </div>
           </div>
@@ -948,6 +962,7 @@ const App = () => {
                 showWSJTX={mapLayers.showWSJTX}
                 onToggleSatellites={toggleSatellites}
                 hoveredSpot={hoveredSpot}
+                hideOverlays={true}
               />
               <div style={{
                 position: 'absolute',
@@ -1000,6 +1015,18 @@ const App = () => {
                     <span style={{ color: 'var(--text-muted)', textAlign: 'right' }}>{spot.time || '--'}</span>
                   </div>
                 ))}
+              </div>
+
+              {/* DX News - sidebar footer */}
+              <div style={{
+                flexShrink: 0,
+                borderTop: '1px solid var(--border-color)',
+                background: 'var(--bg-panel)',
+                height: '28px',
+                position: 'relative',
+                overflow: 'hidden'
+              }}>
+                <DXNewsTicker sidebar={true} />
               </div>
             </div>
           </div>
