@@ -746,28 +746,40 @@ export function useLayer({ enabled = false, opacity = 0.9, map = null }) {
 
   // Create proximity panel control (30km radius)
   useEffect(() => {
+    console.log('[Lightning] Proximity effect triggered - enabled:', enabled, 'map:', !!map, 'proximityControl:', !!proximityControl);
+    
     if (!map || typeof L === 'undefined') {
+      console.log('[Lightning] Proximity: No map or Leaflet');
       return;
     }
     if (!enabled) {
+      console.log('[Lightning] Proximity: Not enabled');
       return;
     }
     if (proximityControl) {
+      console.log('[Lightning] Proximity: Already exists, skipping');
       return; // Already created
     }
     
+    console.log('[Lightning] Proximity: Checking for hamclockConfig...');
+    
     // Check if config is available, if not set a timeout to retry
     if (!window.hamclockConfig) {
-      console.log('[Lightning] Proximity: waiting for hamclockConfig...');
+      console.log('[Lightning] Proximity: Config not available yet, setting retry timer');
       const retryTimer = setTimeout(() => {
+        console.log('[Lightning] Proximity: Retry timer fired, checking config again...');
         // Force a re-check by updating a dummy state
         if (window.hamclockConfig && !proximityControl) {
-          console.log('[Lightning] Proximity: Config now available, creating panel...');
+          console.log('[Lightning] Proximity: Config now available, triggering re-render');
           setLightningData(prev => [...prev]); // Trigger re-render
+        } else {
+          console.log('[Lightning] Proximity: Still no config or control already exists');
         }
       }, 2000);
       return () => clearTimeout(retryTimer);
     }
+    
+    console.log('[Lightning] Proximity: Config available!');
     
     const config = window.hamclockConfig;
     const stationLat = config.latitude;
@@ -776,11 +788,11 @@ export function useLayer({ enabled = false, opacity = 0.9, map = null }) {
     console.log('[Lightning] Proximity: Station location:', { stationLat, stationLon });
     
     if (!stationLat || !stationLon) {
-      console.log('[Lightning] Proximity: Station location not set - skipping proximity panel');
+      console.log('[Lightning] Proximity: No station location - aborting');
       return;
     }
 
-    console.log('[Lightning] Creating proximity panel control...');
+    console.log('[Lightning] Proximity: ALL CHECKS PASSED - Creating panel now!');
 
     const ProximityControl = L.Control.extend({
       options: { position: 'bottomright' },
@@ -811,13 +823,18 @@ export function useLayer({ enabled = false, opacity = 0.9, map = null }) {
     });
 
     const control = new ProximityControl();
+    console.log('[Lightning] Proximity: ProximityControl instance created');
     map.addControl(control);
+    console.log('[Lightning] Proximity: Control added to map');
     setProximityControl(control);
+    console.log('[Lightning] Proximity: State updated with control');
 
     // Make draggable and add minimize toggle
     setTimeout(() => {
+      console.log('[Lightning] Proximity: Looking for .lightning-proximity container...');
       const container = document.querySelector('.lightning-proximity');
       if (container) {
+        console.log('[Lightning] Proximity: Container found! Making draggable...');
         const saved = localStorage.getItem('lightning-proximity-position');
         if (saved) {
           try {
@@ -827,11 +844,17 @@ export function useLayer({ enabled = false, opacity = 0.9, map = null }) {
             container.style.left = left + 'px';
             container.style.right = 'auto';
             container.style.bottom = 'auto';
-          } catch (e) {}
+            console.log('[Lightning] Proximity: Applied saved position:', { top, left });
+          } catch (e) {
+            console.error('[Lightning] Proximity: Error applying saved position:', e);
+          }
         }
         
         makeDraggable(container, 'lightning-proximity-position');
         addMinimizeToggle(container, 'lightning-proximity-position');
+        console.log('[Lightning] Proximity: Panel is now draggable and minimizable');
+      } else {
+        console.error('[Lightning] Proximity: Container NOT FOUND!');
       }
     }, 150);
 
