@@ -80,3 +80,4 @@ config.json
 # Raspberry Pi specific
 *.img
 *.iso
+data/stats.json
