@@ -5917,7 +5917,7 @@ app.listen(PORT, '0.0.0.0', () => {
   if (WSJTX_RELAY_KEY) {
     console.log(`  🔁 WSJT-X relay endpoint enabled (POST /api/wsjtx/relay)`);
   }
-  if (N1MM_ENABLED) {
+if (N1MM_ENABLED) {
     console.log(`  📥 N1MM UDP listener on port ${N1MM_UDP_PORT}`);
   }
   if (AUTO_UPDATE_ENABLED) {
